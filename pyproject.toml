@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bora-historia"
+version = "0.1.0"
+description = "Cliente del timeline del Boletín Oficial (BORA): historial de avisos por sociedad."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "requests",
+]
+
+[project.scripts]
+bora-historia = "bora_historia.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bora_historia"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
