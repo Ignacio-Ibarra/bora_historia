@@ -44,6 +44,7 @@ El timeline admite tres tipos de búsqueda, y cada uno tiene su método y su sub
 | Método | Subcomando | Devuelve |
 |---|---|---|
 | `buscar_sociedad(nombre, *, id_aviso=None)` | `bora-historia sociedad "TRIVEXA S.A." [--id-aviso A1535314]` | `Busqueda` (con estado explícito) |
+| `avisos_previos(nombre, antes_de, *, id_aviso=None)` | `bora-historia previos "TRIVEXA S.A." --antes-de 2026-10-13` | `HistorialPrevio`: los avisos anteriores a la fecha (ver "El día D") |
 | `buscar_persona(cuit_o_dni)` | `bora-historia persona 20123456789` | `list[Sociedad]` donde figura la persona |
 | `buscar_texto(texto, *, max_length=None)` | `bora-historia texto "fusion por absorcion" [--max-length 5000]` | `list[Sociedad]` con avisos que contienen el texto |
 | `consultar(tipo, texto, *, max_length=None)` | `--crudo` en cualquiera de los tres | la lista `societies` tal como la entrega el timeline |
@@ -77,6 +78,44 @@ Modelos (`pydantic`, inmutables):
 
 `buscar_persona` y `buscar_texto` devuelven `Sociedad` sin filtrar por nombre (no hay nombre
 contra el cual comparar): es lo que el timeline devuelva para esa búsqueda.
+
+## El día D: `avisos_previos`
+
+El timeline recibe los avisos con un día de retraso: el día que se publica un aviso, todavía
+no figura en la historia de su sociedad. Lo que se puede saber ese día es qué avisos tenía
+**antes**, y eso alcanza para sospechar de un aviso: por ejemplo, un "aviso de constitución"
+de una sociedad que ya tiene un `ESTATUTO` publicado no puede ser su constitución.
+
+```python
+h = TimelineClient().avisos_previos("TRIVEXA S.A.", date(2026, 10, 13))
+h.tiene_previos        # True
+h.avisos               # [Aviso(A1534865, 2026-10-09, ['ESTATUTO'])]
+```
+
+`HistorialPrevio.tiene_previos` tiene **tres valores**, y la diferencia importa:
+
+| Valor | Significa |
+|---|---|
+| `True` | La sociedad tiene al menos un aviso anterior a la fecha. |
+| `False` | Se encontró la sociedad y no tiene avisos anteriores. |
+| `None` | **Sin datos**: no se encontró (o la búsqueda se truncó). No equivale a "sin historia": puede ser una sociedad nueva, o un nombre que la API no resuelve. |
+
+Además trae `estado`, `razones_sociales` y `ambigua`, y se serializa con todo eso
+(`model_dump_json()`).
+
+**Homónimos.** El día D no hay `id_aviso` con el cual elegir entre dos sociedades que se
+llaman igual, así que, si `ambigua` es `True`, `avisos` es la **unión** de las candidatas. Eso
+puede dar una falsa alarma (un homónimo viejo hace parecer que la sociedad nueva tiene
+historia), pero nunca oculta una historia real, y las falsas alarmas son baratas.
+
+Simulado el día D sobre ~1270 avisos reales: 4 (0,3%) tenían homónimos; unirlos sumó 3
+falsas alarmas y no se perdió ninguno de los 10 avisos mal etiquetados que se buscaban.
+Pasando el `id_aviso` (cuando se lo conoce, p. ej. en un análisis posterior) se resuelve el
+homónimo y la falsa alarma desaparece.
+
+**Qué no hace.** No decide si un aviso es constitución o modificación: entrega la historia y
+quien la usa decide. Tampoco distingue una sociedad nueva de un nombre no resuelto cuando da
+`None`.
 
 ## Particularidades del timeline
 

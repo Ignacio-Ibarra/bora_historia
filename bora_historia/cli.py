@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from datetime import date
 from typing import Optional, Sequence
 
 from bora_historia.client import TimelineClient
@@ -25,6 +26,12 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("nombre", help='Nombre de la sociedad, p. ej. "TRIVEXA S.A."')
     p.add_argument("--id-aviso", default=None, help="Id de un aviso de la sociedad, para resolver homónimos")
 
+    p = sub.add_parser("previos", help="Avisos de una sociedad anteriores a una fecha (lo que se ve el día D)")
+    p.add_argument("nombre", help='Nombre de la sociedad, p. ej. "TRIVEXA S.A."')
+    p.add_argument("--antes-de", required=True, type=date.fromisoformat, metavar="AAAA-MM-DD",
+                   help="Fecha del aviso nuevo; se listan los avisos publicados antes")
+    p.add_argument("--id-aviso", default=None, help="Id de un aviso de la sociedad, para resolver homónimos")
+
     p = comando("persona", "Sociedades donde figura una persona")
     p.add_argument("identificacion", help="CUIT o DNI de la persona")
 
@@ -46,6 +53,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 _imprimir(cliente.consultar("society", args.nombre))
             else:
                 _imprimir(cliente.buscar_sociedad(args.nombre, id_aviso=args.id_aviso).model_dump(mode="json"))
+        elif args.comando == "previos":
+            _imprimir(cliente.avisos_previos(args.nombre, args.antes_de, id_aviso=args.id_aviso).model_dump(mode="json"))
         elif args.comando == "persona":
             if args.crudo:
                 _imprimir(cliente.consultar("person", args.identificacion))

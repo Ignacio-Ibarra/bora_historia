@@ -8,12 +8,13 @@ from __future__ import annotations
 import json
 import re
 import time
+from datetime import date
 from typing import Any, Callable, Optional
 
 import requests
 
 from bora_historia.errors import RespuestaInesperada, TimelineError
-from bora_historia.models import Busqueda, Estado, Sociedad
+from bora_historia.models import Busqueda, Estado, HistorialPrevio, Sociedad
 from bora_historia.nombres import coincide, variantes_consulta
 
 BASE_URL = "https://timeline.boletinoficial.gob.ar/"
@@ -144,6 +145,19 @@ class TimelineClient:
                 mejor = resultado
         assert mejor is not None  # variantes_consulta siempre devuelve al menos una
         return mejor
+
+    def avisos_previos(
+        self, nombre: str, antes_de: date, *, id_aviso: Optional[str] = None
+    ) -> HistorialPrevio:
+        """Avisos de una sociedad anteriores a `antes_de`: lo que se ve el día que sale un aviso nuevo.
+
+        Es `buscar_sociedad` más el filtro por fecha, con el resultado de tres valores de
+        `HistorialPrevio.tiene_previos` (True, False o None si no hay datos). Si hay homónimos
+        y no se pasa `id_aviso` (el día D no existe todavía), devuelve la unión de las candidatas
+        marcando `ambigua`: puede dar una falsa alarma, pero no oculta una historia real.
+        """
+        busqueda = self.buscar_sociedad(nombre, id_aviso=id_aviso)
+        return HistorialPrevio.desde_busqueda(busqueda, antes_de)
 
     def buscar_persona(self, identificacion: str) -> list[Sociedad]:
         """Sociedades en cuyos avisos figura una persona, por CUIT o DNI."""

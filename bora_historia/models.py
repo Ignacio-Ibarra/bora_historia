@@ -11,7 +11,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 _FECHA_API = re.compile(r"^\d{2}-\d{2}-\d{4}$")
 
@@ -137,3 +137,59 @@ class Busqueda(_Base):
 
     def contiene(self, id_aviso: str) -> bool:
         return any(s.contiene(id_aviso) for s in self.sociedades)
+
+    def avisos_antes_de(self, fecha: date) -> list[Aviso]:
+        """Avisos publicados estrictamente antes de `fecha`, de todas las sociedades que coinciden.
+
+        Si la búsqueda es AMBIGUA (homónimos) es la unión de las candidatas, en orden cronológico.
+        """
+        avisos = [a for s in self.sociedades for a in s.avisos_antes_de(fecha)]
+        return sorted(avisos, key=lambda a: (a.fecha_publicado, a.id_aviso))
+
+
+class HistorialPrevio(_Base):
+    """Qué avisos tenía una sociedad antes de una fecha: lo que se ve el día que sale un aviso nuevo.
+
+    El timeline recibe los avisos con un día de retraso, así que el día D el aviso nuevo todavía
+    no figura en la historia de su sociedad: lo que hay son los avisos anteriores. Esta clase
+    los entrega junto con cuánta confianza darles.
+
+    `tiene_previos` tiene tres valores, y la diferencia entre ellos importa:
+      - True: la sociedad tiene al menos un aviso anterior.
+      - False: la sociedad se encontró y no tiene avisos anteriores.
+      - None: sin datos. No se encontró la sociedad (o la búsqueda se truncó), y eso NO equivale a
+        "sin historia": puede ser una sociedad nueva, o un nombre que la API no resuelve.
+    """
+
+    busqueda: Busqueda
+    antes_de: date
+    avisos: list[Aviso] = Field(default_factory=list)
+
+    @classmethod
+    def desde_busqueda(cls, busqueda: Busqueda, antes_de: date) -> "HistorialPrevio":
+        return cls(busqueda=busqueda, antes_de=antes_de, avisos=busqueda.avisos_antes_de(antes_de))
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def estado(self) -> Estado:
+        return self.busqueda.estado
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ambigua(self) -> bool:
+        """True si los avisos salen de varias sociedades homónimas, sin poder saber cuál es la buscada."""
+        return self.busqueda.estado is Estado.AMBIGUA
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def razones_sociales(self) -> list[str]:
+        return [s.razon_social for s in self.busqueda.sociedades]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tiene_previos(self) -> Optional[bool]:
+        if self.avisos:
+            return True
+        if self.busqueda.estado in (Estado.ENCONTRADA, Estado.AMBIGUA):
+            return False
+        return None
